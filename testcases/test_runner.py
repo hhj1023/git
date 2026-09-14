@@ -1,29 +1,33 @@
-# -*- coding: utf-8 -*-
 """
 接口自动化测试执行器（项目核心文件）
 
-流程：Excel 用例 → Jinja2 渲染 {{占位符}} → 发送请求 → HTTP/DB 断言 → 提取变量供后续用例使用
-注意：
-  - 登录用例必须在 Excel 中排在最前（先提取 token，后续用例才有值可渲染）
-  - "创建用户 hhj" 用例非幂等，重跑前需清理数据：DELETE FROM mydb.sp_manager WHERE mg_name='hhj';
-"""
+流程：Excel 用例 → Jinja2 渲染 {{占位符}} → 发送请求 → HTTP/JDBC断言 → 提取变量供后续用例使用
 
-import allure
-import jsonpath
-import pymysql
+登录用例在 Excel 中排在最前（先提取 token，后续用例才有值可渲染）
+
+全流程幂等：用户/商品用例都是「创建 → 删除」闭环，重跑无需手动清库。
+商品的删除接口是软删除（is_del=1，数据行仍留在表里），而 sp_goods.goods_name 有唯一索引，
+因此商品名改用 {{now}} 动态生成（每次运行的时间戳都不同），避免重跑时同名冲突。
+"""
+import logging
+import time
+
 import pytest
-import requests
 from jinja2 import Template
 
+from utils.allure_utils import allure_init
+from utils.analyse_case import analyse_case
+from utils.asserts import http_assert, jdbc_assert
 from utils.excel_utils import read_excel
-
-# 被测服务地址（结尾不带斜杠，避免与 path 的前导斜杠拼出 // 导致鉴权失败）
-BASE_URL = "http://127.0.0.1:8888/api/private/v1"
+from utils.extractor import json_extractor, jdbc_extractor
+from utils.send_request import send_http_request, send_jdbc_request
 
 data = read_excel()
 
 # 全局变量池：存放各用例提取的值（如 token、JAY_ID），供后续用例 {{变量}} 渲染
-all = {}
+# now：本次运行的时间戳（毫秒级），用于生成「每次运行都不同」的数据（如商品名 测试商品{{now}}）。
+#      目的是让用例可重复执行 —— 商品是软删除且 goods_name 有唯一索引，用固定名字第二次会冲突
+all = {"now": int(time.time() * 1000)}
 
 
 class TestRunner:
@@ -32,81 +36,35 @@ class TestRunner:
     @pytest.mark.parametrize("case", data)
     def test_login(self, case):
 
-        # ① 渲染模板：把 {{xxx}} 占位符替换成全局变量池的值，eval 还原为 dict
+        # 渲染模板：把{{xxx}}占位符替换成全局变量池的值，eval还原为dict
         case = eval(Template(str(case)).render(all))
 
-        # ② Allure 动态打标（报告三级目录）
-        allure.dynamic.feature(case["feature"])
-        allure.dynamic.story(case["story"])
-        allure.dynamic.title(f"{case['id']}--{case['title']}")
+        #显示日志信息
+        # 注意：f-string 里嵌套的引号要用单引号，避免外层双引号冲突（Python 3.12 以下会直接语法报错）
+        logging.info(f"用例ID：{case['id']},模块：{case['feature']},场景：{case['story']},标题：{case['title']}")
 
-        # ③ 解析请求参数（Excel 单元格为字符串时 eval 还原为 dict）
-        method = case["method"]
-        # 去掉 path 前导斜杠后统一拼接，避免双斜杠
-        url = f"{BASE_URL}/{str(case['path']).lstrip('/')}"
+        #初始化报告
+        allure_init(case)
 
-        headers = eval(case["headers"]) if isinstance(case["headers"], str) else None   # 请求头
-        json_body = eval(case["json"]) if isinstance(case["json"], str) else None       # JSON 请求体
-        form_data = eval(case["data"]) if isinstance(case["data"], str) else None       # 表单请求体
-        params = eval(case["params"]) if isinstance(case["params"], str) else None      # URL 查询参数
-        files = eval(case["files"]) if isinstance(case["files"], str) else None         # 上传文件
+        #解析请求数据
+        request_data=analyse_case(case)
 
-        # ④ 组装并发送请求（统一打包，无需区分请求类型；None 参数会被 requests 忽略）
-        request_data = {
-            "method": method,
-            "url": url,
-            "headers": headers,
-            "json": json_body,
-            "data": form_data,
-            "params": params,
-            "files": files,
-        }
-        res = requests.request(**request_data)
-        print(res.json())
+        # 发送请求，得到响应结果
+        res = send_http_request(**request_data)
 
-        # ⑤ HTTP 断言：填了 jsonpath 则精确比较，否则模糊匹配响应文本
-        if case["check"]:
-            actual = jsonpath.jsonpath(res.json(), case["check"])[0]
-            assert actual == case["expected"], f"预期[{case['expected']}]，实际[{actual}]，响应：{res.json()}"
-        else:
-            assert case["expected"] in res.text, f"预期[{case['expected']}]，实际响应：{res.text}"
+        #HTTP响应断言
+        http_assert(case,res)
 
-        # ⑥ DB 断言（可选）：校验接口是否真正写库成功
-        if case["sql_check"] and case["sql_excepted"]:
-            conn = pymysql.Connect(
-                host="127.0.0.1",
-                port=3306,
-                database="mydb",
-                user="root",
-                password="123456",
-                charset="utf8",
-            )
-            cur = conn.cursor()
-            cur.execute(case["sql_check"])
-            db_result = cur.fetchall()
-            cur.close()
-            conn.close()
-            assert db_result[0][0] == case["sql_excepted"]
+        #数据库断言
+        jdbc_assert(case)
 
-        # ⑦ JSON 提取：把响应值存入全局变量池，如 {"token": "$..token"}
-        if case["jsonExData"]:
-            for key, value in eval(case["jsonExData"]).items():
-                all[key] = jsonpath.jsonpath(res.json(), value)[0]
+        #JSON提取
+        json_extractor(case,all,res)
 
-        # ⑧ DB 提取（可选）：从数据库取值存入全局变量池，如新用户 id
-        if case["sqlExData"]:
-            for key, value in eval(case["sqlExData"]).items():
-                conn = pymysql.Connect(
-                    host="127.0.0.1",
-                    port=3306,
-                    database="mydb",
-                    user="root",
-                    password="123456",
-                    charset="utf8",
-                )
-                cur = conn.cursor()
-                cur.execute(value)
-                db_result = cur.fetchall()
-                cur.close()
-                conn.close()
-                all[key] = db_result[0]
+        #JDBC提取
+        jdbc_extractor(case,all)
+
+
+
+
+
