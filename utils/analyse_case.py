@@ -7,8 +7,7 @@ import allure
 def analyse_case(case):
 
     method = case["method"]
-    # lstrip('/') 兜底：无论 Excel 里 path 带不带前导斜杠都只拼一个 /
-    # （否则可能拼出 //login 双斜杠被服务端鉴权中间件截走，或 v1users 漏斜杠 404）
+    # lstrip('/') 无论 Excel 里 path 带不带前导斜杠都只拼一个 /
     url = BASE_URL + "/" + str(case['path']).lstrip('/')
 
     # 解析请求参数（Excel 单元格为字符串时 eval 还原为 dict）
