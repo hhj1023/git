@@ -16,7 +16,6 @@ def json_extractor(case,all,res):
 
 # 数据库提取：从数据库取值存入全局变量池，如新用户id
 def jdbc_extractor(case,all):
-    # with 要放在 if 里面：没有 sqlExData 的用例不应在报告里显示空的 JDBC 提取步骤
     if case["sqlExData"]:
         with allure.step("4.JDBC提取"):
             for key, value in eval(case["sqlExData"]).items():
