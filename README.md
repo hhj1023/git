@@ -148,9 +148,17 @@ python run.py
 
 最新运行：**40 条用例全部通过**，9 个业务模块覆盖率 100%，连续多次执行均通过（用例自闭环，重跑无需手动清库）。
 
-![Allure 测试报告总览](https://cdn.jsdelivr.net/gh/hhj1023/git@main/docs/allure-overview.png)
+| 指标 | 结果 |
+|---|---|
+| 用例总数 | 40 |
+| 通过 / 失败 | 40 / 0（100%） |
+| 覆盖模块 | 登录、用户管理、图片上传、商品管理、权限管理、订单管理、角色管理、异常参数、重复提交（9 个） |
+| 单次执行耗时 | 约 0.7s |
+| 可重复执行 | 是（创建→删除闭环，`{{now}}` 动态数据，重跑无需清库） |
 
-> 图片走 jsDelivr CDN，避免 `raw.githubusercontent.com` 在部分网络环境下无法访问导致 README 图片加载失败。
+![Allure 测试报告总览](./docs/allure-overview.png)
+
+> 图片由 GitHub 通过 `camo.githubusercontent.com` 代理加载，若在公司网络或部分网络环境下显示不出来，属图片代理域名被拦截，不影响仓库内容；本地执行 `python run.py` 后打开 `./report/html_report/index.html` 可查看完整报告。
 
 ## 环境要求
 
