@@ -117,27 +117,46 @@ test_project/
 # 1. 安装依赖
 pip install pytest requests openpyxl jinja2 jsonpath pymysql allure-pytest
 
-# 2. 启动被测服务（vueShop-api-server，监听 127.0.0.1:8888）
-#    并确认 config/config.py 中数据库连接配置正确
+# 2. 配置环境变量（数据库密码不再写死在代码里）
+#    Windows(cmd):        set DB_PASSWORD=你的数据库密码
+#    Windows(PowerShell): $env:DB_PASSWORD="你的数据库密码"
+#    macOS/Linux:         export DB_PASSWORD=你的数据库密码
+#    PyCharm:             Run/Debug Configurations -> Environment variables
+#    其他可配置项见 .env.example（均有默认值，只有密码必填）
 
-# 3. 执行用例并生成报告
+# 3. 启动被测服务（vueShop-api-server，监听 127.0.0.1:8888）
+
+# 4. 执行用例并生成报告
 python run.py
 
-# 4. 查看报告
+# 5. 查看报告
 #    浏览器打开 ./report/html_report/index.html
 ```
+
+> 未配置 `DB_PASSWORD` 时会直接抛出明确提示：用例 1 需要查库校验登录信息，缺密码会导致 token 提取失败、后续用例连锁失败。
+
+### 配置项（全部读环境变量，见 `config/config.py`）
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `DB_PASSWORD` | 无（必填） | MySQL 密码，用于数据库断言与提取 |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` | `127.0.0.1` / `3306` / `mydb` / `root` | 数据库连接 |
+| `BASE_URL` | `http://127.0.0.1:8888/api/private/v1` | 被测服务地址 |
+| `EXCEL_FILE` / `SHEET_NAME` | `./data/测试数据.xlsx` / `Sheet1` | 用例文件 |
 
 ## 测试报告
 
 最新运行：**40 条用例全部通过**，9 个业务模块覆盖率 100%，连续多次执行均通过（用例自闭环，重跑无需手动清库）。
 
-![Allure 测试报告总览](./docs/allure-overview.png)
+![Allure 测试报告总览](https://cdn.jsdelivr.net/gh/hhj1023/git@main/docs/allure-overview.png)
+
+> 图片走 jsDelivr CDN，避免 `raw.githubusercontent.com` 在部分网络环境下无法访问导致 README 图片加载失败。
 
 ## 环境要求
 
 - Python 3.8+
 - 被测服务：vueShop-api-server（`http://127.0.0.1:8888/api/private/v1`）
-- 数据库：MySQL（用于数据库断言与提取）
+- 数据库：MySQL（用于数据库断言与提取），密码通过环境变量 `DB_PASSWORD` 注入
 - Allure 命令行工具（用于渲染 HTML 报告）
 
 ## 说明
