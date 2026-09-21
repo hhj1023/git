@@ -156,9 +156,9 @@ python run.py
 | 单次执行耗时 | 约 0.7s |
 | 可重复执行 | 是（创建→删除闭环，`{{now}}` 动态数据，重跑无需清库） |
 
-![Allure 测试报告总览](./docs/allure-overview.png)
+![Allure 测试报告总览](https://raw.githubusercontent.com/hhj1023/git/main/docs/allure-overview.png)
 
-> 图片由 GitHub 通过 `camo.githubusercontent.com` 代理加载，若在公司网络或部分网络环境下显示不出来，属图片代理域名被拦截，不影响仓库内容；本地执行 `python run.py` 后打开 `./report/html_report/index.html` 可查看完整报告。
+> 这里用绝对地址而非相对路径：相对路径会被 GitHub 渲染成 `raw.githubusercontent.com` 直链，在部分网络环境下该域名无法解析，图片就显示不出来；绝对地址则会走 GitHub 的 `camo.githubusercontent.com` 图片代理，可正常加载。
 
 ## 环境要求
 
