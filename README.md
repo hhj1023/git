@@ -1,6 +1,8 @@
 # 接口自动化测试项目（pytest + requests）
 
-基于 **pytest + requests** 的 Excel 数据驱动接口自动化测试框架，覆盖 **登录、用户管理、商品管理、图片上传** 4 个模块共 **11 条用例**，支持 **HTTP 断言 + 数据库断言**、JSON/JDBC 变量提取与用例间传参，执行后一键生成 Allure 可视化报告。
+基于 **pytest + requests** 的 Excel 数据驱动接口自动化测试框架，覆盖 **登录、用户管理、商品管理、图片上传、权限管理、订单管理、角色管理、异常参数、重复提交** 9 个模块共 **40 条用例**，支持 **HTTP 断言 + 数据库断言**、JSON/JDBC 变量提取与用例间传参，执行后一键生成 Allure 可视化报告。
+
+除正向业务流程外，还覆盖**鉴权失败、参数缺失/类型错误/取值越界**等异常场景，以及**重复提交**的幂等性与重名校验验证（其中角色重复提交为已确认的服务端缺陷，见用例 34）。
 
 ## 技术栈
 
@@ -77,6 +79,37 @@ test_project/
 | 9 | 商品管理 | 创建成功 | POST /goods | 商品名动态生成，提取商品 ID |
 | 10 | 商品管理 | 修改成功 | PUT /goods/{{SHOP_ID}}/state/1 | 使用提取的 ID 修改状态 |
 | 11 | 商品管理 | 删除成功 | DELETE /goods/{{SHOP_ID}} | 使用提取的 ID 删除，闭环清理 |
+| 12 | 权限管理 | 查询成功 | GET /rights/list | 权限列表（type 仅支持 list / tree） |
+| 13 | 订单管理 | 查询成功 | GET /orders | 提取订单 ID 供后续用例复用 |
+| 14 | 订单管理 | 修改成功 | PUT /orders/{{ORDER_ID}} | 订单无 `/state/:state` 路由，直接 PUT 本体 |
+| 15 | 角色管理 | 查询成功 | GET /roles | 查询角色列表 |
+| 16 | 角色管理 | 创建成功 | POST /roles | 角色名动态生成，提取 roleId |
+| 17 | 角色管理 | 修改成功 | PUT /roles/{{ROLES_ID}} | 服务端更新成功返回 msg 为「获取成功」 |
+| 18 | 角色管理 | 删除成功 | DELETE /roles/{{ROLES_ID}} | 闭环清理 |
+| 19 | 权限管理 | 鉴权失败 | GET /users（无 token） | 提示「无效token」 |
+| 20 | 权限管理 | 鉴权失败 | GET /users（错误 token） | 提示「无效token」 |
+| 21 | 权限管理 | 查询成功 | GET /rights/tree | 树形结构权限列表 |
+| 22 | 权限管理 | 参数非法 | GET /rights/xxx | 提示「显示类型参数错误」 |
+| 23 | 权限管理 | 创建成功 | POST /roles | 创建授权专用角色 |
+| 24 | 权限管理 | 授权成功 | POST /roles/{{AUTH_ROLE_ID}}/rights | 为角色赋权限 101 |
+| 25 | 权限管理 | 取消授权 | DELETE /roles/{{AUTH_ROLE_ID}}/rights/101 | 取消权限成功 |
+| 26 | 权限管理 | 删除成功 | DELETE /roles/{{AUTH_ROLE_ID}} | 闭环清理 |
+| 27 | 异常参数 | 缺少必填 | GET /orders（无 pagenum） | 提示「pagenum 参数错误」 |
+| 28 | 异常参数 | 参数越界 | GET /orders?pagenum=0 | 提示「pagenum 参数错误」 |
+| 29 | 异常参数 | 缺少必填 | POST /roles（空 body） | 提示「角色名称不能为空」 |
+| 30 | 异常参数 | 类型错误 | PUT /roles/abc | 提示「角色ID必须为数字」 |
+| 31 | 异常参数 | 缺少必填 | POST /goods（空 body） | 提示「商品名称不能为空」 |
+| 32 | 异常参数 | 缺少必填 | PUT /orders/{{ORDER_ID}} | 缺 order_price，提示「订单价格不能为空」 |
+| 33 | 重复提交 | 首次提交 | POST /roles | 创建角色，提取 ID 与名称 |
+| 34 | 重复提交 | 重复提交 | POST /roles（同名第二次） | **服务端未校验重名仍返回「创建成功」——已确认缺陷** |
+| 35 | 重复提交 | 清理数据 | DELETE /roles/{{DUP_ROLE_ID2}} | 删除重复产生的副本 |
+| 36 | 重复提交 | 首次删除 | DELETE /roles/{{DUP_ROLE_ID}} | 删除成功 |
+| 37 | 重复提交 | 重复删除 | DELETE /roles/{{DUP_ROLE_ID}} | 第二次提示「删除失败」 |
+| 38 | 重复提交 | 首次提交 | POST /goods | 创建商品，提取 ID 与名称 |
+| 39 | 重复提交 | 重复提交 | POST /goods（同名第二次） | 商品表有唯一索引，正确拦截：「商品名称已存在」 |
+| 40 | 重复提交 | 清理数据 | DELETE /goods/{{DUP_GOODS_ID}} | 闭环清理 |
+
+> 用例 34 当前断言为「创建成功」，即**锁定现状行为**。若后续 `sp_role.role_name` 补上唯一约束，将该用例预期改为「角色名称已存在」，即可直接作为回归验证。
 
 ## 运行
 
@@ -96,7 +129,7 @@ python run.py
 
 ## 测试报告
 
-最新运行：11 条用例，**全部通过**，4 个业务模块覆盖率 100%。
+最新运行：**40 条用例全部通过**，9 个业务模块覆盖率 100%，连续多次执行均通过（用例自闭环，重跑无需手动清库）。
 
 ![Allure 测试报告总览](./docs/allure-overview.png)
 
